@@ -1,5 +1,7 @@
 # data_cleaner
 
+A data quality gate for a fake hospital dataset. Plain-language glossary: **contract** = the written rules for a table, **fault** = an error planted on purpose, **repair** = auto-fix, **quarantine** = held back with a reason, **eval** = the scorecard.
+
 Data contracts on a synthetic health system warehouse. Faults are injected on purpose; the contracts have to catch every one, safe repairs fix what can't change meaning, the rest is quarantined with reasons, and an eval proves it against what was injected. Built for showing data quality patterns, phone-first.
 
 ```

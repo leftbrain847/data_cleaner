@@ -77,7 +77,7 @@ def evaluate(faults, manifest, results, repair_log, quarantine, checks):
             outcomes = ["quarantine" if (t, i) in held else "repair" if (t, i) in repaired else "missed" for i in ids]
             n, hit = len(ids), sum(o == f["expect"] for o in outcomes)
             got = f["expect"] if hit == n else ", ".join(sorted(set(outcomes)))
-        rows.append({"fault": fid, "table": t, "kind": f["kind"], "injected": n, "expect": f["expect"],
+        rows.append({"fault": fid, "label": f.get("label", fid), "table": t, "kind": f["kind"], "injected": n, "expect": f["expect"],
                      "got": got, "matched": hit, "pass": hit == n})
     false_pos = sorted(k for k in q_rows | repaired if k not in injected)
     return {"faults": rows, "false_positives": [{"table": t, "row": i} for t, i in false_pos],

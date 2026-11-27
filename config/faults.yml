@@ -1,4 +1,4 @@
-# Fault catalog: what goes wrong between source and landing. Turn faults on/off, change rates, add new ones.
+# Planted errors ("faults"): what goes wrong between the source and what lands. `label` is what the report shows. Turn faults on/off, change rates, add new ones.
 # kind        what it does
 #   null_out      blank a column on `rate` of rows
 #   duplicate     re-send `rate` of rows (same key)
@@ -12,6 +12,7 @@
 #   quarantine  rows held back      repair  rows fixed and kept      table  a table-level check fails
 faults:
   - id: missing_clinician
+    label: "Clinician ID left blank"
     enabled: true
     table: FactCardiacEvents
     kind: null_out
@@ -20,6 +21,7 @@ faults:
     expect: quarantine
 
   - id: resent_events
+    label: "Same visit sent twice"
     enabled: true
     table: FactCardiacEvents
     kind: duplicate
@@ -27,6 +29,7 @@ faults:
     expect: quarantine
 
   - id: unknown_status
+    label: "Status not Admitted/Discharged"
     enabled: true
     table: FactCardiacEvents
     kind: bad_value
@@ -36,6 +39,7 @@ faults:
     expect: quarantine
 
   - id: status_casing
+    label: "Status in wrong case or with extra spaces"
     enabled: true
     table: FactCardiacEvents
     kind: mangle_case
@@ -44,6 +48,7 @@ faults:
     expect: repair
 
   - id: risk_over_one
+    label: "Risk score outside 0 to 1"
     enabled: true
     table: FactCardiacEvents
     kind: bad_value
@@ -53,6 +58,7 @@ faults:
     expect: quarantine
 
   - id: us_date_format
+    label: "Date written as MM/DD/YYYY"
     enabled: true
     table: FactCardiacEvents
     kind: date_format
@@ -62,6 +68,7 @@ faults:
     expect: repair
 
   - id: garbage_date
+    label: "Date that isn't a date"
     enabled: true
     table: FactCardiacEvents
     kind: bad_value
@@ -71,6 +78,7 @@ faults:
     expect: quarantine
 
   - id: orphan_clinician
+    label: "Clinician ID that doesn't exist"
     enabled: true
     table: FactCardiacEvents
     kind: bad_value
@@ -80,6 +88,7 @@ faults:
     expect: quarantine
 
   - id: admit_before_intake
+    label: "Admitted before intake"
     enabled: true
     table: FactCardiacEvents
     kind: shift_date
@@ -91,6 +100,7 @@ faults:
     expect: quarantine
 
   - id: partial_clinician_load
+    label: "Clinician table only partly loaded"
     enabled: false          # flip on to see a table-level failure
     table: DimClinician
     kind: drop_rows
@@ -98,6 +108,7 @@ faults:
     expect: table
 
   - id: dropped_column
+    label: "A column stopped arriving"
     enabled: false          # flip on to see schema drift
     table: DimLocation
     kind: drop_column
