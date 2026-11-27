@@ -96,7 +96,7 @@ def render(out, cfg):
     refs = {n: {"columns": t["columns"], "rows": [[r.get(c) for c in t["columns"]] for r in t["rows"]]}
             for n, t in out["tables"]["source"].items() if n != "FactCardiacEvents"}
     app = {"checks": out["checks"], "columns": out["contract_columns"], "refs": refs,
-           "maxMb": MAX_UPLOAD_MB, "sampleRows": rc["sample_rows"]}
+           "maxMb": MAX_UPLOAD_MB, "sampleRows": rc["sample_rows"], "liveUrl": rc["pages_url"]}
     app_json = json.dumps(app, separators=(",", ":")).replace("</", "<\\/")
     samples = rc["pages_url"].rstrip("/") + "/samples/"  # absolute, so the frozen snapshot's links still work
 
@@ -222,7 +222,10 @@ $('file').addEventListener('change', async (e) => {{
       const csv = [[...cols, '_reasons'].map(safeCell).join(','), ...rows.map((r) => [...cols.map((c) => safeCell(r[c])), safeCell(bad.get(r._row_id).join('; '))].join(','))].join('\\n');
       const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {{type: 'text/csv'}})); a.download = 'quarantine_' + target + '.csv'; a.click();
     }};
-  }} catch (err) {{ $('status').textContent = "Couldn't check that file: " + err.message; console.error(err); }}
+  }} catch (err) {{
+    $('status').innerHTML = `Couldn't check that file: ${{esc(err.message)}}. If this page is embedded somewhere that blocks the checker, open the <a href="${{esc(APP.liveUrl)}}">live page</a>.`;
+    console.error(err);
+  }}
 }});
 </script></body></html>
 """
