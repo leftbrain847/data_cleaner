@@ -1,0 +1,105 @@
+# Fault catalog: what goes wrong between source and landing. Turn faults on/off, change rates, add new ones.
+# kind        what it does
+#   null_out      blank a column on `rate` of rows
+#   duplicate     re-send `rate` of rows (same key)
+#   bad_value     overwrite a column with one of `values`
+#   mangle_case   same value, wrong case + stray spaces
+#   date_format   rewrite an ISO date as `format` (strftime)
+#   shift_date    move `column` by `days` relative to `relative_to`
+#   drop_rows     keep only `keep` share of the table (a partial load)
+#   drop_column   the column stops arriving (schema drift)
+# expect: what the pipeline should do with the affected rows
+#   quarantine  rows held back      repair  rows fixed and kept      table  a table-level check fails
+faults:
+  - id: missing_clinician
+    enabled: true
+    table: FactCardiacEvents
+    kind: null_out
+    column: IntakeClinicianID
+    rate: 0.01
+    expect: quarantine
+
+  - id: resent_events
+    enabled: true
+    table: FactCardiacEvents
+    kind: duplicate
+    rate: 0.015
+    expect: quarantine
+
+  - id: unknown_status
+    enabled: true
+    table: FactCardiacEvents
+    kind: bad_value
+    column: AdmissionStatus
+    values: [Unknown, Pending]
+    rate: 0.008
+    expect: quarantine
+
+  - id: status_casing
+    enabled: true
+    table: FactCardiacEvents
+    kind: mangle_case
+    column: AdmissionStatus
+    rate: 0.01
+    expect: repair
+
+  - id: risk_over_one
+    enabled: true
+    table: FactCardiacEvents
+    kind: bad_value
+    column: CardiacArrestLikelihood
+    values: ["1.7", "-0.2"]
+    rate: 0.006
+    expect: quarantine
+
+  - id: us_date_format
+    enabled: true
+    table: FactCardiacEvents
+    kind: date_format
+    column: IntakeDate
+    format: "%m/%d/%Y"
+    rate: 0.01
+    expect: repair
+
+  - id: garbage_date
+    enabled: true
+    table: FactCardiacEvents
+    kind: bad_value
+    column: IntakeDate
+    values: ["N/A", "2024-13-45"]
+    rate: 0.004
+    expect: quarantine
+
+  - id: orphan_clinician
+    enabled: true
+    table: FactCardiacEvents
+    kind: bad_value
+    column: IntakeClinicianID
+    values: [CL9999, CL0000]
+    rate: 0.006
+    expect: quarantine
+
+  - id: admit_before_intake
+    enabled: true
+    table: FactCardiacEvents
+    kind: shift_date
+    column: AdmissionDate
+    relative_to: IntakeDate
+    days: -3
+    where: {AdmissionStatus: Admitted}
+    rate: 0.02
+    expect: quarantine
+
+  - id: partial_clinician_load
+    enabled: false          # flip on to see a table-level failure
+    table: DimClinician
+    kind: drop_rows
+    keep: 0.4
+    expect: table
+
+  - id: dropped_column
+    enabled: false          # flip on to see schema drift
+    table: DimLocation
+    kind: drop_column
+    column: ClinicianLocation
+    expect: table

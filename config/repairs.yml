@@ -1,0 +1,9 @@
+# Repairs run on landing data before the contracts. Only fixes that can't change meaning belong here.
+repairs:
+  - id: canonical_enum
+    kind: canonical_enum     # trim + match a contract's valid values case-insensitively
+    enabled: true
+  - id: iso_dates
+    kind: date_formats       # reparse known alternate formats into ISO dates
+    enabled: true
+    formats: ["%m/%d/%Y", "%Y/%m/%d"]

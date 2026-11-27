@@ -18,6 +18,10 @@ jobs:
       - name: Plain JS tests
         if: hashFiles('package.json') == '' && hashFiles('**/*.test.js', '**/*.test.mjs') != ''
         run: node --test
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        if: hashFiles('requirements*.txt', 'pyproject.toml') != ''
+        with:
+          python-version: "3.12"
       - name: Python tests
         if: hashFiles('tests/**/*.py', 'pyproject.toml', 'requirements*.txt') != ''
         run: |
@@ -25,3 +29,6 @@ jobs:
           [ -f requirements.txt ] && pip install -q -r requirements.txt || true
           [ -f pyproject.toml ] && pip install -q -e . || true
           pytest -q
+      - name: Pipeline runs end to end and passes its own eval
+        if: hashFiles('data_cleaner/__main__.py') != ''
+        run: python -m data_cleaner
