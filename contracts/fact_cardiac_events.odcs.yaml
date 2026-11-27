@@ -30,14 +30,14 @@ schema:
         mustBeBetween: [1000, 1000000]
       - id: admitted_has_admission_date
         type: sql
-        description: Admitted rows carry an admission date; discharged rows don't.
+        description: Admitted without an admission date, or discharged with one
         query: >-
           SELECT COUNT(*) FROM FactCardiacEvents
           WHERE (AdmissionStatus = 'Admitted') <> (AdmissionDate IS NOT NULL)
         mustBe: 0
       - id: admission_not_before_intake
         type: sql
-        description: A patient can't be admitted before intake.
+        description: Admission date is before the intake date
         query: >-
           SELECT COUNT(*) FROM FactCardiacEvents
           WHERE TRY_CAST(AdmissionDate AS DATE) < TRY_CAST(IntakeDate AS DATE)

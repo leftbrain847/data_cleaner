@@ -10,6 +10,7 @@ from .tables import ROW_ID
 
 DUCKDB_WASM = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.32.0/+esm"  # pinned; same as portfolio
 MAX_UPLOAD_MB = 25
+WANT = {"quarantine": "held back", "repair": "auto-fixed", "table": "table flagged"}
 
 CSS = """
 :root{--bg:#0f1115;--panel:#171a21;--line:#262b36;--text:#e7e9ee;--muted:#9aa3b2;--good:#3fb27f;--bad:#e5534b;--warn:#d29922;--accent:#58a6ff}
@@ -27,7 +28,7 @@ code{overflow-wrap:anywhere;font:13px ui-monospace,SFMono-Regular,Menlo,Consolas
 .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:10px}
 table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
 th{color:var(--muted);font-weight:600;background:var(--panel)}tr:last-child td{border-bottom:0}
-td.num{text-align:right;font-variant-numeric:tabular-nums}
+td.wrap{white-space:normal}td.num{text-align:right;font-variant-numeric:tabular-nums}
 .ok{color:var(--good)}.no{color:var(--bad)}.skip{color:var(--warn)}
 details{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin:8px 0;padding:0 12px}
 summary{cursor:pointer;padding:11px 0;list-style:none;display:flex;gap:8px;align-items:baseline}
@@ -57,12 +58,12 @@ def render(out, cfg):
     by_id = {n: {r[ROW_ID]: r for r in t["rows"]} for n, t in landing.items()}
     handled = sum(f["pass"] for f in ev["faults"])
     verdict_ok = ev["pass"] and not s["baseline_failures"]
-    verdict = (f"Eval {'passed' if verdict_ok else 'FAILED'}: {handled}/{len(ev['faults'])} faults handled as expected · "
-               f"{len(ev['false_positives'])} false alarms · clean source {'passes' if not s['baseline_failures'] else 'FAILS'} every check")
+    verdict = (f"{'✓' if verdict_ok else '✗'} Caught {handled} of {len(ev['faults'])} planted error types · "
+               f"{len(ev['false_positives'])} good rows wrongly flagged · original data {'passes' if not s['baseline_failures'] else 'FAILS'} every rule")
 
     fault_rows = "".join(
-        f"<tr><td>{escape(f['fault'])}<br><span class='muted small'>{escape(f['kind'])}</span></td><td class='num'>{f['injected']}</td>"
-        f"<td>{escape(f['expect'])}</td><td class='{'ok' if f['pass'] else 'no'}'>{'✓' if f['pass'] else '✗ ' + escape(f['got'])}</td></tr>"
+        f"<tr><td class='wrap'>{escape(f['label'])}</td><td class='num'>{f['injected']}</td>"
+        f"<td class='{'ok' if f['pass'] else 'no'}'>{escape(WANT.get(f['expect'], f['expect']))} {'✓' if f['pass'] else '✗ got ' + escape(f['got'])}</td></tr>"
         for f in sorted(ev["faults"], key=lambda f: (f["pass"], f["fault"])))
 
     order = {"fail": 0, "error": 1, "skipped": 2, "pass": 3}
@@ -72,7 +73,7 @@ def render(out, cfg):
             continue
         cls = {"fail": "no", "error": "no", "skipped": "skip"}[r["status"]]
         n = f"{len(r['rows']):,} rows" if r["level"] == "row" else r["status"]
-        body = f"<p class='muted small'>{escape(r['description'])}</p>"
+        body = ""
         if r.get("detail"):
             body += f"<p class='small'>{escape(r['detail'])}</p>"
         if r["rows"]:
@@ -80,8 +81,8 @@ def render(out, cfg):
             cols = ["_row_id"] + cols[: rc["sample_columns"] - 1]
             sample = [by_id[r["table"]][i] for i in r["rows"][: rc["sample_rows"]]]
             body += _rows_table(sample, cols)
-        label = r["id"].split(".", 1)[1] if "." in r["id"] else r["id"]
-        body = f"<p class='small'><code>{escape(r['id'])}</code></p>" + body
+        label = r["description"]
+        body = f"<p class='small muted'>Rule <code>{escape(r['id'])}</code></p>" + body
         checks_html.append(f"<details><summary><span class='{cls}'>●</span> <span>{escape(label)}</span>"
                            f"<span class='n {cls}'>{n}</span></summary><div class='body'>{body}</div></details>")
     passed = sum(r["status"] == "pass" for r in out["results"])
@@ -90,7 +91,7 @@ def render(out, cfg):
     for e in out["repairs"]:
         by_kind.setdefault(e["repair"], []).append(e)
     repairs = [e for v in by_kind.values() for e in v[: rc["sample_rows"]]]
-    repair_html = _rows_table(repairs, ["repair", "column", "row", "from", "to"]) if repairs else "<p class='muted'>None.</p>"
+    repair_html = _rows_table([{**e, "from": repr(e["from"])} for e in repairs], ["column", "from", "to"]) if repairs else "<p class='muted'>None.</p>"
 
     # Data the in-browser checker needs: check SQL, contract columns, and the reference tables (dims) for FK checks.
     refs = {n: {"columns": t["columns"], "rows": [[r.get(c) for c in t["columns"]] for r in t["rows"]]}
@@ -102,38 +103,38 @@ def render(out, cfg):
 
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{escape(rc['title'])}: data contracts on synthetic health data</title>
-<meta name="description" content="Data contracts catch injected faults in a synthetic health system warehouse.">
+<title>{escape(rc["title"])}: data quality gate on fake hospital data</title>
+<meta name="description" content="A data quality gate catches planted errors in a fake hospital dataset.">
 <style>{CSS}</style></head><body><main>
 <h1>{escape(rc['title'])}</h1>
-<p class="muted">Data contracts on a synthetic health system warehouse. Faults are injected on purpose; the contracts have to catch every one, and raise no false alarms on clean data.</p>
+<p class="muted">A data quality gate for a fake hospital dataset. Each table has written rules (columns, allowed values, ranges, links between tables). Errors are planted in the data on purpose; the gate has to fix what's safe to fix, hold back the rest with a reason, and never flag good rows.</p>
 <span class="pill {'ok' if verdict_ok else 'no'}">{escape(verdict)}</span>
-<div class="tiles">{_tile(s['rows_in'], 'rows landed')}{_tile(s['rows_clean'], 'clean')}{_tile(s['rows_repaired'], 'repaired')}{_tile(s['rows_quarantined'], 'quarantined')}{_tile(s['checks_failed'], f"of {s['checks']} checks failed")}</div>
+<div class="tiles">{_tile(s['rows_in'], 'rows received')}{_tile(s['rows_clean'], 'passed')}{_tile(s['rows_repaired'], 'auto-fixed')}{_tile(s['rows_quarantined'], 'held back')}{_tile(s['checks_failed'], f"of {s['checks']} rules broken")}</div>
 
-<h2>Faults injected</h2>
-<div class="scroll"><table><thead><tr><th>fault</th><th>rows</th><th>expect</th><th>result</th></tr></thead><tbody>{fault_rows}</tbody></table></div>
-<p class="muted small">From <code>config/faults.yml</code>. Each row gets at most one fault, so every outcome traces back to its cause.</p>
+<h2>Planted errors and what happened</h2>
+<div class="scroll"><table><thead><tr><th>planted error</th><th>rows</th><th>result</th></tr></thead><tbody>{fault_rows}</tbody></table></div>
+<p class="muted small">Each row gets at most one planted error, so every result traces back to its cause. Set in <code>config/faults.yml</code>.</p>
 
-<h2>Contract checks that fired</h2>
+<h2>Rules that caught something</h2>
 {''.join(checks_html) or "<p class='muted'>None.</p>"}
-<p class="muted small">{passed} other checks passed. Contracts: <a href="{escape(rc['repo_url'])}/tree/main/contracts">contracts/*.odcs.yaml</a> (Open Data Contract Standard).</p>
+<p class="muted small">{passed} other rules found nothing. The rules live in <a href="{escape(rc['repo_url'])}/tree/main/contracts">contracts/</a>, one file per table, in an open standard format (ODCS) other tools can read.</p>
 
-<h2>Safe repairs</h2>
+<h2>Auto-fixes</h2>
 {repair_html}
-<p class="muted small">{s['rows_repaired']} rows fixed without changing meaning (casing, whitespace, date formats). Anything ambiguous is quarantined instead.</p>
+<p class="muted small">{s['rows_repaired']} rows fixed where the meaning was certain (casing, spaces, date format). Anything less certain is held back instead.</p>
 
 <h2>Check your own CSV</h2>
 <div class="upload">
-<p>Pick a CSV with the same columns as one of the tables. It's checked <b>on this device</b> with the same contract SQL; the file is never uploaded.</p>
+<p>Pick a CSV with the same columns as one of the tables. It's checked against the same rules <b>on this device</b>; the file is never uploaded.</p>
 <p class="small muted">The checker (DuckDB-WASM 1.32.0) loads from the jsDelivr CDN; for sensitive files, run the repo locally instead.</p>
 <p><label class="file btn">Choose CSV<input id="file" type="file" accept=".csv,text/csv"></label>
 <select id="table" aria-label="table"></select></p>
-<p class="small muted">Try one: <a href="{escape(samples)}FactCardiacEvents_landing.csv">landing file with faults</a> · <a href="{escape(samples)}FactCardiacEvents_clean.csv">clean file</a></p>
+<p class="small muted">Try one: <a href="{escape(samples)}FactCardiacEvents_landing.csv">file with planted errors</a> · <a href="{escape(samples)}FactCardiacEvents_clean.csv">clean file</a></p>
 <div id="status" class="small muted"></div><div id="out"></div>
 </div>
 
 <h2>How it works</h2>
-<p class="small">generate (seeded) → inject faults → safe repairs → contract checks in DuckDB → clean / quarantine split → eval against what was injected. Every setting is in <code>config/</code>. Each contract also lists a SQL Server connection with env-var placeholders, so the same contract can be pointed at a work database later.</p>
+<p class="small">make the fake data → plant errors → auto-fix the safe ones → run every rule (as SQL, in DuckDB) → split passed / held back → score against the planted errors. Every setting is in <code>config/</code>. Each table's rules also list a SQL Server connection (placeholders only), so the same rules can later run against a real database.</p>
 <footer>All data is synthetic. <a href="{escape(rc['repo_url'])}">Source</a></footer>
 </main>
 <script type="application/json" id="app">{app_json}</script>
@@ -201,9 +202,9 @@ $('file').addEventListener('change', async (e) => {{
     for (const r of results) for (const id of r.rows) bad.set(id, [...(bad.get(id) || []), r.id]);
     const total = rowsOf(await con.query(`SELECT COUNT(*) AS n FROM ${{q(target)}}`))[0].n;
     const fired = results.filter((r) => r.status !== 'pass');
-    let html = `<p><b>${{esc(file.name)}}</b> checked as <code>${{esc(target)}}</code>: ${{total.toLocaleString()}} rows, ${{bad.size.toLocaleString()}} would be quarantined, ${{fired.length}} of ${{results.length}} checks fired.</p><p class="muted small">Safe repairs (casing, date formats) only run in the pipeline, so here those rows count as quarantined.</p>`;
+    let html = `<p><b>${{esc(file.name)}}</b> checked as <code>${{esc(target)}}</code>: ${{total.toLocaleString()}} rows, ${{bad.size.toLocaleString()}} would be held back, ${{fired.length}} of ${{results.length}} rules broken.</p><p class="muted small">Auto-fixes only run in the full pipeline, so here fixable rows count as held back.</p>`;
     for (const r of fired) {{
-      let body = `<p class="muted small">${{esc(r.description)}}</p>` + (r.detail ? `<p class="small">${{esc(r.detail)}}</p>` : '');
+      let body = `<p class="muted small">Rule <code>${{esc(r.id)}}</code></p>` + (r.detail ? `<p class="small">${{esc(r.detail)}}</p>` : '');
       if (r.rows.length) {{
         const ids = r.rows.slice(0, APP.sampleRows).join(',');
         const sample = rowsOf(await con.query(`SELECT * FROM ${{q(target)}} WHERE _row_id IN (${{ids}}) ORDER BY _row_id`));
@@ -212,9 +213,9 @@ $('file').addEventListener('change', async (e) => {{
           sample.map((s) => '<tr>' + cols.map((c) => `<td>${{esc(s[c])}}</td>`).join('') + '</tr>').join('') + '</tbody></table></div>';
       }}
       const cls = r.status === 'skipped' ? 'skip' : 'no';
-      html += `<details><summary><span class="${{cls}}">●</span> <span>${{esc(r.id.split('.').slice(1).join('.'))}}</span><span class="n ${{cls}}">${{r.rows.length ? r.rows.length.toLocaleString() + ' rows' : r.status}}</span></summary><div class="body">${{body}}</div></details>`;
+      html += `<details><summary><span class="${{cls}}">●</span> <span>${{esc(r.description)}}</span><span class="n ${{cls}}">${{r.rows.length ? r.rows.length.toLocaleString() + ' rows' : r.status}}</span></summary><div class="body">${{body}}</div></details>`;
     }}
-    if (bad.size) html += '<p><button id="dl">Download quarantine CSV</button></p>';
+    if (bad.size) html += '<p><button id="dl">Download held-back rows (CSV)</button></p>';
     $('out').innerHTML = html; $('status').textContent = 'Checked on this device. Nothing was uploaded.';
     if (bad.size) $('dl').onclick = async () => {{
       const ids = [...bad.keys()].join(',');
