@@ -1,0 +1,30 @@
+# Every run setting lives here. Paths are relative to the repo root.
+source:
+  generator: source/generate_synthetic_data.py   # seeded, synthetic only
+  tables: [FactCardiacEvents, DimClinician, DimLocation]
+
+paths:
+  work: out                 # everything below is generated and git-ignored
+  source: out/source        # clean CSVs straight from the generator
+  landing: out/landing      # source + injected faults (what "arrives")
+  clean: out/clean          # rows that pass every contract
+  quarantine: out/quarantine  # rows that failed, with reasons
+  site: site                # the report GitHub Pages serves
+
+contracts:
+  dir: contracts
+  server: local             # which servers[] entry to run against; see README for SQL Server
+
+faults:
+  catalog: config/faults.yml
+  seed: 27                  # same seed, same faults, same rows
+
+repairs:
+  catalog: config/repairs.yml
+
+report:
+  title: data_cleaner
+  sample_rows: 5            # bad rows shown per failed check
+  sample_columns: 6
+  repo_url: https://github.com/leftbrain847/data_cleaner
+  pages_url: https://leftbrain847.github.io/data_cleaner

@@ -1,0 +1,102 @@
+# Open Data Contract Standard (ODCS) v3.1 style. data_cleaner runs the subset listed in README.
+apiVersion: v3.1.0
+kind: DataContract
+id: fact_cardiac_events
+name: Cardiac intake events
+version: 1.0.0
+status: active
+domain: cardiac_intake
+description:
+  purpose: One row per patient intake. Feeds the clinician-vs-Goldman analysis.
+  limitations: Synthetic data only.
+servers:
+  - server: local
+    type: duckdb
+    description: CSVs loaded into in-memory DuckDB by data_cleaner
+  - server: work_sqlserver
+    type: sqlserver
+    description: Placeholder. Fill from env vars, never commit values.
+    host: ${SQLSERVER_HOST}
+    port: 1433
+    database: ${SQLSERVER_DATABASE}
+    schema: dbo
+schema:
+  - name: FactCardiacEvents
+    physicalName: FactCardiacEvents
+    logicalType: object
+    quality:
+      - id: row_count
+        metric: rowCount
+        mustBeBetween: [1000, 1000000]
+      - id: admitted_has_admission_date
+        type: sql
+        description: Admitted rows carry an admission date; discharged rows don't.
+        query: >-
+          SELECT COUNT(*) FROM FactCardiacEvents
+          WHERE (AdmissionStatus = 'Admitted') <> (AdmissionDate IS NOT NULL)
+        mustBe: 0
+      - id: admission_not_before_intake
+        type: sql
+        description: A patient can't be admitted before intake.
+        query: >-
+          SELECT COUNT(*) FROM FactCardiacEvents
+          WHERE TRY_CAST(AdmissionDate AS DATE) < TRY_CAST(IntakeDate AS DATE)
+        mustBe: 0
+    properties:
+      - name: EventCode
+        logicalType: integer
+        required: true
+        unique: true
+        primaryKey: true
+      - name: PatientID
+        logicalType: integer
+        required: true
+      - name: IntakeDate
+        logicalType: date
+        required: true
+        logicalTypeOptions: {minimum: "2020-01-01", maximum: "2030-12-31"}
+      - name: AdmissionDate
+        logicalType: date
+      - name: AdmissionStatus
+        logicalType: string
+        required: true
+        quality:
+          - metric: invalidValues
+            arguments: {validValues: [Admitted, Discharged]}
+            mustBe: 0
+      - name: Location
+        logicalType: string
+        required: true
+        relationships:
+          - to: DimLocation.LocationCode
+      - name: IntakeClinicianID
+        logicalType: string
+        required: true
+        logicalTypeOptions: {pattern: "^CL[0-9]{4}$"}
+        relationships:
+          - to: DimClinician.ClinicianID
+      - name: ClinicianDecision
+        logicalType: string
+        required: true
+        quality:
+          - metric: invalidValues
+            arguments: {validValues: [Admit, Send Home]}
+            mustBe: 0
+      - name: GoldmanStatus
+        logicalType: integer
+        required: true
+        logicalTypeOptions: {minimum: 1, maximum: 4}
+      - name: CardiacArrestLikelihood
+        logicalType: number
+        required: true
+        logicalTypeOptions: {minimum: 0, maximum: 1}
+      - name: CardiacArrestWithin3DaysOfBeingSentHome
+        logicalType: integer
+        required: true
+        quality:
+          - metric: invalidValues
+            arguments: {validValues: ["0", "1"]}
+            mustBe: 0
+      - name: ECG
+        logicalType: string
+        required: true

@@ -1,0 +1,36 @@
+apiVersion: v3.1.0
+kind: DataContract
+id: dim_location
+name: Hospitals
+version: 1.0.0
+status: active
+domain: cardiac_intake
+description:
+  purpose: Hospitals in the network.
+  limitations: Synthetic data only.
+servers:
+  - server: local
+    type: duckdb
+  - server: work_sqlserver
+    type: sqlserver
+    host: ${SQLSERVER_HOST}
+    port: 1433
+    database: ${SQLSERVER_DATABASE}
+    schema: dbo
+schema:
+  - name: DimLocation
+    physicalName: DimLocation
+    logicalType: object
+    quality:
+      - id: row_count
+        metric: rowCount
+        mustBeBetween: [1, 1000]
+    properties:
+      - name: LocationCode
+        logicalType: string
+        required: true
+        unique: true
+        primaryKey: true
+      - name: ClinicianLocation
+        logicalType: string
+        required: true

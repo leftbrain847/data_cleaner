@@ -1,0 +1,45 @@
+apiVersion: v3.1.0
+kind: DataContract
+id: dim_clinician
+name: Clinicians
+version: 1.0.0
+status: active
+domain: cardiac_intake
+description:
+  purpose: Clinicians and the hospital they work at.
+  limitations: Synthetic data only.
+servers:
+  - server: local
+    type: duckdb
+  - server: work_sqlserver
+    type: sqlserver
+    host: ${SQLSERVER_HOST}
+    port: 1433
+    database: ${SQLSERVER_DATABASE}
+    schema: dbo
+schema:
+  - name: DimClinician
+    physicalName: DimClinician
+    logicalType: object
+    quality:
+      - id: row_count
+        metric: rowCount
+        mustBeBetween: [50, 10000]
+    properties:
+      - name: ClinicianID
+        logicalType: string
+        required: true
+        unique: true
+        primaryKey: true
+        logicalTypeOptions: {pattern: "^CL[0-9]{4}$"}
+      - name: ClinicianName
+        logicalType: string
+        required: true
+      - name: LocationCode
+        logicalType: string
+        required: true
+        relationships:
+          - to: DimLocation.LocationCode
+      - name: LocationSkew
+        logicalType: number
+        logicalTypeOptions: {minimum: 0, maximum: 1}
