@@ -50,6 +50,7 @@ a{color:var(--accent)}footer{margin-top:36px;color:var(--muted);font-size:12px}
 <h2>Check your own CSV</h2>
 <div class="upload">
 <p>Pick a CSV with the same columns as one of the tables. It's checked <b>on this device</b> with the same contract SQL; the file is never uploaded.</p>
+<p class="small muted">The checker (DuckDB-WASM 1.32.0) loads from the jsDelivr CDN; for sensitive files, run the repo locally instead.</p>
 <p><label class="file btn">Choose CSV<input id="file" type="file" accept=".csv,text/csv"></label>
 <select id="table" aria-label="table"></select></p>
 <p class="small muted">Try one: <a href="https://leftbrain847.github.io/data_cleaner/samples/FactCardiacEvents_landing.csv">landing file with faults</a> · <a href="https://leftbrain847.github.io/data_cleaner/samples/FactCardiacEvents_clean.csv">clean file</a></p>
@@ -82,8 +83,8 @@ async function engine() {
   return dbp;
 }
 const rowsOf = (res) => res.toArray().map((r) => { const o = r.toJSON(); for (const k in o) if (typeof o[k] === 'bigint') o[k] = Number(o[k]); return o; });
-// Spreadsheet formula injection: a cell starting with = + @ (or - not followed by a digit) is prefixed with '
-const safeCell = (v) => { const s = String(v ?? ''); const t = /^[=+@\t\r]|^-(?![0-9.])/.test(s) ? "'" + s : s; return /[",\n]/.test(t) ? '"' + t.replaceAll('"', '""') + '"' : t; };
+// Spreadsheet formula injection: a cell starting with = + - @ tab or CR is prefixed with ', unless it is a plain number
+const safeCell = (v) => { const s = String(v ?? ''); const t = /^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s) ? "'" + s : s; return /[",\r\n]/.test(t) ? '"' + t.replaceAll('"', '""') + '"' : t; };
 $('file').addEventListener('change', async (e) => {
   const file = e.target.files[0]; if (!file) return;
   $('out').innerHTML = '';
@@ -94,7 +95,7 @@ $('file').addEventListener('change', async (e) => {
     const header = (text.split(/\r?\n/, 1)[0] || '').split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
     let target = $('table').value;
     if (!target) target = tables.map((t) => [t, APP.columns[t].filter((c) => header.includes(c)).length]).sort((a, b) => b[1] - a[1])[0][0];
-    const db = await engine(); const con = await db.connect();
+    const db = await engine(); if (window.__con) await window.__con.close(); const con = await db.connect(); window.__con = con;
     await db.registerFileText('upload.csv', text);
     for (const t of tables) await con.query(`DROP TABLE IF EXISTS ${q(t)}`);
     for (const [t, ref] of Object.entries(APP.refs)) {
@@ -103,7 +104,7 @@ $('file').addEventListener('change', async (e) => {
       const vals = ref.rows.map((r, i) => '(' + [i + 1, ...r.map((v) => v == null ? 'NULL' : "'" + String(v).replaceAll("'", "''") + "'")].join(',') + ')').join(',');
       if (vals) await con.query(`INSERT INTO ${q(t)} VALUES ${vals}`);
     }
-    await con.query(`CREATE TABLE ${q(target)} AS SELECT row_number() OVER () AS _row_id, * FROM read_csv('upload.csv', header=true, all_varchar=true, nullstr='')`);
+    await con.query(`CREATE TABLE ${q(target)} AS SELECT row_number() OVER () AS _row_id, * EXCLUDE (_row_id) FROM (SELECT NULL AS _row_id, * FROM read_csv('upload.csv', header=true, all_varchar=true, nullstr=''))`);
     const present = rowsOf(await con.query(`DESCRIBE ${q(target)}`)).map((r) => r.column_name);
     const results = [];
     for (const ch of APP.checks.filter((c) => c.table === target)) {
