@@ -42,7 +42,7 @@ Other ODCS fields are carried but not executed.
 Demo only: the page says not to upload real patient or work data.
 - The file is read on the device and never uploaded; no model reads it.
 - The checker (DuckDB-WASM 1.32.0) is built from npm by `vendor/build.mjs` (versions pinned and integrity-checked by `vendor/package-lock.json`) and served from this site. No CDN at runtime.
-- A Content-Security-Policy lets the page load and connect to its own origin only, and run only its one inline script (by hash). Even tampered code couldn't send a file elsewhere.
+- A Content-Security-Policy lets the page load and fetch from its own origin only, and run only its one inline script (by hash), so injected code can't run. Limits: a meta CSP doesn't cover the worker file and can't block navigation, so the guarantee rests on only pinned, same-origin code running; DuckDB extension autoloading is switched off so the engine never reaches out. Use made-up data.
 - Column names are quoted in SQL, values are escaped before display, and the held-back CSV download neutralizes spreadsheet formulas.
 - Local preview of the checker: `npm ci --prefix vendor && npm run --prefix vendor build` before `python -m data_cleaner`.
 

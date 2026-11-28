@@ -75,7 +75,7 @@ def test_outputs_written(default_run):
     assert "fonts.googleapis" not in html and "@import" not in html      # system fonts only
     assert "cdn.jsdelivr" not in html and "unpkg" not in html            # checker served from this site
     csp = html.split('http-equiv="Content-Security-Policy" content="', 1)[1].split('"', 1)[0]
-    assert "default-src 'none'" in csp and "connect-src 'self'" in csp and "unsafe-eval'" not in csp.replace("wasm-unsafe-eval", "")
+    assert "default-src 'none'" in csp and "connect-src 'self'" in csp and "unsafe-eval" not in csp
     assert json.loads((site / "results.json").read_text())["eval"]["pass"]
     for t in ["FactCardiacEvents", "DimClinician", "DimLocation"]:
         assert (cfg["abs"]["quarantine"] / f"{t}.csv").exists()

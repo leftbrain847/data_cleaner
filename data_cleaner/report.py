@@ -131,7 +131,7 @@ __CSP__
 <div class="upload">
 <p>Pick a CSV with the same columns as one of the tables. It's checked against the same rules <b>on this device</b>; the file is never uploaded.</p>
 <p class="warn small"><b>Demo only.</b> Don't upload real patient or work data. Use the sample files or other made-up data; for real data, run the repo locally.</p>
-<p class="small muted">The checker is served from this site, and the page is locked so it can't send anything to another address.</p>
+<p class="small muted">The checker is served from this site (no CDN) and the page is locked to this site's address. Use made-up data anyway.</p>
 <p><label class="file btn">Choose CSV<input id="file" type="file" accept=".csv,text/csv"></label>
 <select id="table" aria-label="table"></select></p>
 <p class="small muted">Try one: <a href="{escape(samples)}FactCardiacEvents_landing.csv">file with planted errors</a> · <a href="{escape(samples)}FactCardiacEvents_clean.csv">clean file</a></p>
@@ -174,7 +174,7 @@ $('file').addEventListener('change', async (e) => {{
     const header = (text.split(/\\r?\\n/, 1)[0] || '').split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
     let target = $('table').value;
     if (!target) target = tables.map((t) => [t, APP.columns[t].filter((c) => header.includes(c)).length]).sort((a, b) => b[1] - a[1])[0][0];
-    const db = await engine(); if (window.__con) await window.__con.close(); const con = await db.connect(); window.__con = con;
+    const db = await engine(); if (window.__con) await window.__con.close(); const con = await db.connect(); window.__con = con; await con.query('SET autoinstall_known_extensions = false; SET autoload_known_extensions = false');
     await db.registerFileText('upload.csv', text);
     for (const t of tables) await con.query(`DROP TABLE IF EXISTS ${{q(t)}}`);
     for (const [t, ref] of Object.entries(APP.refs)) {{
@@ -239,11 +239,12 @@ $('file').addEventListener('change', async (e) => {{
 def _with_csp(html):
     """Lock the page down: only its own origin, and only the exact inline script (by hash).
 
-    connect-src 'self' means even a tampered script could not send an uploaded file to another address.
+    connect-src 'self' stops the page itself from fetching other addresses. Limits: the worker file takes no policy from
+    a meta tag, and CSP can't block navigation, so the real guarantee is that only pinned same-origin code runs.
     """
     scripts = re.findall(r'<script type="module">(.*?)</script>', html, re.S)
     hashes = " ".join("'sha256-" + base64.b64encode(hashlib.sha256(js.encode()).digest()).decode() + "'" for js in scripts)
     csp = ("default-src 'none'; "
-           f"script-src 'self' 'wasm-unsafe-eval' {hashes}; worker-src 'self'; connect-src 'self'; "
+           f"script-src 'self' {hashes}; worker-src 'self'; connect-src 'self'; "
            "style-src 'unsafe-inline'; img-src 'self' data: blob:; base-uri 'none'; form-action 'none'")
     return html.replace("__CSP__", f'<meta http-equiv="Content-Security-Policy" content="{csp}">', 1)
