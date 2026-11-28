@@ -39,7 +39,12 @@ Table: every contract column arrives (schema drift), `metric: rowCount` with `mu
 Other ODCS fields are carried but not executed.
 
 ## Check your own CSV (on the report page)
-The page runs the same contract SQL in the browser with DuckDB-WASM (pinned version, loaded from jsDelivr). The file is read on the device and never uploaded; nothing a visitor picks reaches this repo or any server. Column names are quoted, values are escaped before display, and the downloadable quarantine CSV neutralizes spreadsheet formulas. No model reads uploaded files.
+Demo only: the page says not to upload real patient or work data.
+- The file is read on the device and never uploaded; no model reads it.
+- The checker (DuckDB-WASM 1.32.0) is built from npm by `vendor/build.mjs` (versions pinned and integrity-checked by `vendor/package-lock.json`) and served from this site. No CDN at runtime.
+- A Content-Security-Policy lets the page load and connect to its own origin only, and run only its one inline script (by hash). Even tampered code couldn't send a file elsewhere.
+- Column names are quoted in SQL, values are escaped before display, and the held-back CSV download neutralizes spreadsheet formulas.
+- Local preview of the checker: `npm ci --prefix vendor && npm run --prefix vendor build` before `python -m data_cleaner`.
 
 ## Pointing a contract at SQL Server
 Each contract lists a `work_sqlserver` server with `${SQLSERVER_HOST}` / `${SQLSERVER_DATABASE}` placeholders: never commit real values. Running the checks there is the next step (the check SQL is plain ANSI apart from DuckDB's `TRY_CAST`/`regexp_matches`, which map to T-SQL `TRY_CAST`/`LIKE` patterns).

@@ -3,12 +3,15 @@
 The "Check your own CSV" section runs the same contract SQL in the visitor's browser with DuckDB-WASM.
 Files are read locally and never uploaded anywhere.
 """
+import base64
+import hashlib
 import json
+import re
 from html import escape
 
 from .tables import ROW_ID
 
-DUCKDB_WASM = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.32.0/+esm"  # pinned; same as portfolio
+VENDOR = "vendor/"   # DuckDB-WASM 1.32.0, built from npm into site/vendor/ by vendor/build.mjs (no CDN)
 MAX_UPLOAD_MB = 25
 WANT = {"quarantine": "held back", "repair": "auto-fixed", "table": "table flagged"}
 
@@ -37,7 +40,7 @@ details[open] summary{border-bottom:1px solid var(--line)}details .body{padding:
 .upload{background:var(--panel);border:1px dashed var(--line);border-radius:10px;padding:14px}
 button,select,.btn{font:inherit;color:var(--text);background:#222734;border:1px solid var(--line);border-radius:8px;padding:9px 12px}
 .btn{display:inline-block;text-decoration:none}label.file{display:inline-block}label.file input{display:none}
-a{color:var(--accent)}footer{margin-top:36px;color:var(--muted);font-size:12px}
+a{color:var(--accent)}.warn{border-left:3px solid var(--warn);padding:6px 10px;background:rgba(210,153,34,.1);border-radius:4px}footer{margin-top:36px;color:var(--muted);font-size:12px}
 """
 
 
@@ -101,8 +104,9 @@ def render(out, cfg):
     app_json = json.dumps(app, separators=(",", ":")).replace("</", "<\\/")
     samples = rc["pages_url"].rstrip("/") + "/samples/"  # absolute, so the frozen snapshot's links still work
 
-    return f"""<!doctype html>
+    return _with_csp(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+__CSP__
 <title>{escape(rc["title"])}: data quality gate on fake hospital data</title>
 <meta name="description" content="A data quality gate catches planted errors in a fake hospital dataset.">
 <style>{CSS}</style></head><body><main>
@@ -126,7 +130,8 @@ def render(out, cfg):
 <h2>Check your own CSV</h2>
 <div class="upload">
 <p>Pick a CSV with the same columns as one of the tables. It's checked against the same rules <b>on this device</b>; the file is never uploaded.</p>
-<p class="small muted">The checker (DuckDB-WASM 1.32.0) loads from the jsDelivr CDN; for sensitive files, run the repo locally instead.</p>
+<p class="warn small"><b>Demo only.</b> Don't upload real patient or work data. Use the sample files or other made-up data; for real data, run the repo locally.</p>
+<p class="small muted">The checker is served from this site, and the page is locked so it can't send anything to another address.</p>
 <p><label class="file btn">Choose CSV<input id="file" type="file" accept=".csv,text/csv"></label>
 <select id="table" aria-label="table"></select></p>
 <p class="small muted">Try one: <a href="{escape(samples)}FactCardiacEvents_landing.csv">file with planted errors</a> · <a href="{escape(samples)}FactCardiacEvents_clean.csv">clean file</a></p>
@@ -148,12 +153,10 @@ $('table').innerHTML = '<option value="">auto-detect table</option>' + tables.ma
 let dbp;
 async function engine() {{
   dbp ??= (async () => {{
-    const duckdb = await import('{DUCKDB_WASM}');
-    const bundle = await duckdb.selectBundle(duckdb.getJsDelivrBundles());
-    const url = URL.createObjectURL(new Blob([`importScripts("${{bundle.mainWorker}}");`], {{type: 'text/javascript'}}));
-    const db = new duckdb.AsyncDuckDB(new duckdb.VoidLogger(), new Worker(url));
-    await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-    URL.revokeObjectURL(url);
+    const base = new URL('{VENDOR}', location.href);
+    const duckdb = await import(new URL('duckdb.mjs', base).href);
+    const db = new duckdb.AsyncDuckDB(new duckdb.VoidLogger(), new Worker(new URL('duckdb-browser-eh.worker.js', base)));
+    await db.instantiate(new URL('duckdb-eh.wasm', base).href);
     return db;
   }})();
   return dbp;
@@ -230,4 +233,17 @@ $('file').addEventListener('change', async (e) => {{
   }}
 }});
 </script></body></html>
-"""
+""")
+
+
+def _with_csp(html):
+    """Lock the page down: only its own origin, and only the exact inline script (by hash).
+
+    connect-src 'self' means even a tampered script could not send an uploaded file to another address.
+    """
+    scripts = re.findall(r'<script type="module">(.*?)</script>', html, re.S)
+    hashes = " ".join("'sha256-" + base64.b64encode(hashlib.sha256(js.encode()).digest()).decode() + "'" for js in scripts)
+    csp = ("default-src 'none'; "
+           f"script-src 'self' 'wasm-unsafe-eval' {hashes}; worker-src 'self'; connect-src 'self'; "
+           "style-src 'unsafe-inline'; img-src 'self' data: blob:; base-uri 'none'; form-action 'none'")
+    return html.replace("__CSP__", f'<meta http-equiv="Content-Security-Policy" content="{csp}">', 1)

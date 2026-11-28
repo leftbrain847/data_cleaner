@@ -73,7 +73,9 @@ def test_outputs_written(default_run):
     html = (site / "index.html").read_text()
     assert html.startswith("<!doctype html>") and "<head>" in html
     assert "fonts.googleapis" not in html and "@import" not in html      # system fonts only
-    assert "duckdb-wasm@1.32.0" in html                                   # pinned engine for uploads
+    assert "cdn.jsdelivr" not in html and "unpkg" not in html            # checker served from this site
+    csp = html.split('http-equiv="Content-Security-Policy" content="', 1)[1].split('"', 1)[0]
+    assert "default-src 'none'" in csp and "connect-src 'self'" in csp and "unsafe-eval'" not in csp.replace("wasm-unsafe-eval", "")
     assert json.loads((site / "results.json").read_text())["eval"]["pass"]
     for t in ["FactCardiacEvents", "DimClinician", "DimLocation"]:
         assert (cfg["abs"]["quarantine"] / f"{t}.csv").exists()
@@ -183,3 +185,18 @@ def test_contracts_are_odcs_shaped_and_hold_no_connection_details():
         for s in c["servers"]:
             for k in ("host", "database"):
                 assert k not in s or "${" in str(s[k])
+
+
+def test_csp_hash_matches_the_inline_script(default_run):
+    import base64, hashlib, re
+    cfg, _ = default_run
+    html = (cfg["abs"]["site"] / "index.html").read_text()
+    js = re.findall(r'<script type="module">(.*?)</script>', html, re.S)
+    assert len(js) == 1
+    h = base64.b64encode(hashlib.sha256(js[0].encode()).digest()).decode()
+    assert f"'sha256-{h}'" in html
+
+
+def test_upload_banner_warns_against_real_data(default_run):
+    cfg, _ = default_run
+    assert "Don't upload real patient or work data" in (cfg["abs"]["site"] / "index.html").read_text()
