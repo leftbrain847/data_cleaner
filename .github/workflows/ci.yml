@@ -32,3 +32,18 @@ jobs:
       - name: Pipeline runs end to end and passes its own eval
         if: hashFiles('data_cleaner/__main__.py') != ''
         run: python -m data_cleaner
+      - name: Sprint site check on day snapshots
+        # The nightly refresh holds back any day page that loads a third-party file neither self-hosted nor pinned
+        # by hash. Same check here, markup only, so a bad snapshot fails its own PR instead of a 404 hours later.
+        # Only today's and yesterday's snapshots (ET): older ones are frozen and can't be fixed, so they never
+        # turn CI red. Runs J's public index_engine at main (its rules change there); read-only token, no secrets.
+        if: hashFiles('snapshots/*.html') != ''
+        run: |
+          mkdir -p "$RUNNER_TEMP/snapshots"
+          for d in "$(TZ=America/New_York date +%F)" "$(TZ=America/New_York date -d yesterday +%F)"; do
+            for f in snapshots/"$d"*.html; do [ -e "$f" ] && cp "$f" "$RUNNER_TEMP/snapshots/"; done
+          done
+          if [ -z "$(ls -A "$RUNNER_TEMP/snapshots")" ]; then echo "no snapshot from today or yesterday to check"; exit 0; fi
+          git clone -q --depth 1 https://github.com/leftbrain847/index_engine "$RUNNER_TEMP/engine"
+          pip install -q pyyaml==6.0.3
+          python "$RUNNER_TEMP/engine/tools/site_check.py" "$RUNNER_TEMP/snapshots" --no-browser
